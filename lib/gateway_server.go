@@ -122,6 +122,6 @@ func (s *GatewayServer) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	// Copy status code.
 	res.WriteHeader(resp.StatusCode)
 
-	// Copy body.
+	// Stream response body.
 	io.Copy(res, resp.Body)
 }
