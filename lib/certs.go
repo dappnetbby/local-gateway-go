@@ -18,8 +18,6 @@ import (
 // The directory to location of the Dappnet CA files.
 const DAPPNET_CA_DIR = "/Users/liamz/Library/Application Support/Dappnet/data"
 
-
-
 func getDappnetCA() (*rsa.PrivateKey, *rsa.PublicKey) {
 	// Private key.
 	// 
@@ -60,7 +58,6 @@ func getDappnetCA() (*rsa.PrivateKey, *rsa.PublicKey) {
 		fmt.Printf("Error parsing CA public key: %v\n", err)
 		return nil, nil
 	}
-
 
 	// TODO: will use for validating later.
 	// switch publicKey.(type) {
@@ -121,9 +118,6 @@ func GenerateCertificateForENS(ensDomain string) ([]byte, *rsa.PrivateKey, error
 	// Create a self-signed certificate using the CSR and private key
 	caPrivateKey, _ := getDappnetCA()
 
-
-
-
 	// Load the CA certificate from the file
     caCertFile, err := os.ReadFile(DAPPNET_CA_DIR + "/ca.crt")
     if err != nil {
@@ -149,67 +143,18 @@ func GenerateCertificateForENS(ensDomain string) ([]byte, *rsa.PrivateKey, error
     fmt.Printf("Key Usage: %v\n", caTemplate.KeyUsage)
     fmt.Printf("Basic Constraints Valid: %v\n", caTemplate.BasicConstraintsValid)
 
+	serverDER, err := x509.CreateCertificate(rand.Reader, &template, caTemplate, &serverPrivateKey.PublicKey, caPrivateKey)
+	if err != nil {
+		fmt.Printf("Error creating self-signed certificate: %v\n", err)
+		return []byte{}, nil, err
+	}
 
-
-	// csrTemplate := x509.CertificateRequest{
-    //     Subject: pkix.Name{CommonName: "*." + ensDomain,},
-    // }
-
-    // csrDER, err := x509.CreateCertificateRequest(rand.Reader, &csrTemplate, serverPrivateKey)
-    // if err != nil {
-    //     panic(err)
-    // }
-
-    // pem.Encode(csrFile, &pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER})
-
-
-
-    // Sign the CSR with the root CA to create a server certificate
-    serverTemplate := x509.Certificate{
-        SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Country:      []string{"US"},
-			Organization: []string{"Dappnet"},
-			CommonName:   ensDomain,
-		},
-		Issuer: pkix.Name{
-			Country:      []string{"US"},
-			Organization: []string{"Dappnet CA"},
-			CommonName:   "Dappnet certificates",
-		},
-		NotBefore:             notBefore,
-		NotAfter:              notAfter,
-        KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-    }
-
-    serverDER, err := x509.CreateCertificate(rand.Reader, &serverTemplate, caTemplate, &serverPrivateKey.PublicKey, caPrivateKey)
-    if err != nil {
-        panic(err)
-    }
-
-
-
-
-
-
-
-	// certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, caPrivateKey)
-	// if err != nil {
-	// 	fmt.Printf("Error creating self-signed certificate: %v\n", err)
-	// 	return []byte{}, nil, err
-	// }
-
-	certPEM := pem.EncodeToMemory(&pem.Block{
-		Type: "CERTIFICATE", Bytes: serverDER,
-	})
+	// certPEM := pem.EncodeToMemory(&pem.Block{
+	// 	Type: "CERTIFICATE", Bytes: serverDER,
+	// })
 
 	// Dump this to a file for testing.
-	//
-	err = ioutil.WriteFile("cert.pem", certPEM, 0644)
+	// err = ioutil.WriteFile("cert.pem", certPEM, 0644)
 
-	// Output the self-signed certificate
-	// fmt.Println("Self-Signed Certificate (PEM):")
-	// fmt.Println(string(certPEM))
-
-	return certPEM, serverPrivateKey, nil
+	return serverDER, serverPrivateKey, nil
 }

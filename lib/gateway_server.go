@@ -12,8 +12,56 @@ import (
 type GatewayServer struct {
 	srv *http.Server
 	ensResolver *ENSResolver
+	
+	certificateCache map[string]*tls.Certificate
 }
 
+func NewGatewayServer(port uint) (*GatewayServer) {
+	s := &GatewayServer{}
+	s.ensResolver = NewENSResolver()
+	s.certificateCache = make(map[string]*tls.Certificate)
+
+	// Start the HTTPS server.
+	s.srv = &http.Server{
+		Addr: fmt.Sprintf(":%d", port),
+		Handler: s,
+		TLSConfig: &tls.Config{
+			GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				// Get the host.
+				host := info.ServerName
+				
+				// Check the cache.
+				if cert, ok := s.certificateCache[host]; ok {
+					return cert, nil
+				}
+
+				// Generate the certificate.
+				certDER, privKey, err := GenerateCertificateForENS(host)
+				if err != nil {
+					log.Printf("Error generating certificate: %v\n", err)
+					return nil, err
+				}
+
+				cert := tls.Certificate{
+					Certificate: [][]byte{certDER},
+					PrivateKey:  privKey,
+				}
+
+				// Cache the certificate.
+				s.certificateCache[host] = &cert
+
+				return &cert, nil
+			},
+		},
+	}
+
+	return s
+}
+
+func (s *GatewayServer) Start() (error) {
+	// NOTE: `certFile, keyFile` are empty since we provide a `GetCertificate` function.
+	return s.srv.ListenAndServeTLS("", "")
+}
 
 func (s *GatewayServer) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	// Get the hostname.
@@ -76,45 +124,4 @@ func (s *GatewayServer) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 
 	// Copy body.
 	io.Copy(res, resp.Body)
-}
-
-func NewGatewayServer(port uint) (*GatewayServer) {
-	s := &GatewayServer{}
-	s.ensResolver = NewENSResolver()
-
-	// Start the HTTPS server.
-	s.srv = &http.Server{
-		Addr: fmt.Sprintf(":%d", port),
-		Handler: s,
-		TLSConfig: &tls.Config{
-			GetCertificate: func(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
-				// Get the host.
-				host := info.ServerName
-
-				certDER, privKey, err := GenerateCertificateForENS(host)
-				if err != nil {
-					log.Printf("Error generating certificate: %v\n", err)
-					return nil, err
-				}
-
-				cert := tls.Certificate{
-					Certificate: [][]byte{certDER},
-					PrivateKey:  privKey,
-				}
-
-				// // cert, err := tls.LoadX509KeyPair("localhost.crt", "localhost.key")
-				// if err != nil {
-				// 	return nil, err
-				// }
-				return &cert, nil
-			},
-		},
-	}
-
-	return s
-}
-
-func (s *GatewayServer) Start() (error) {
-	// NOTE: `certFile, keyFile` are empty since we provide a `GetCertificate` function.
-	return s.srv.ListenAndServeTLS("", "")
 }
